@@ -1,0 +1,5 @@
+# config-openai-o3-mini.yaml
+model_name: o3-mini
+prompt_type: reasoning_stance  # Options: reasoning_only, reasoning_stance, reasoning_techniques, reasoning_stance_techniques
+input_data_path: #add test-set path
+output_path: #add output path
