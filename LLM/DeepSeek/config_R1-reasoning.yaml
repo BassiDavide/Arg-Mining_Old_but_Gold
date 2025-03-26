@@ -1,0 +1,5 @@
+# config-deepseek-reasoner.yaml
+model_name: deepseek-reasoner
+prompt_type: reasoning_stance_techniques  # Options: reasoning_stance, reasoning_techniques, reasoning_stance_techniques
+input_data_path: #add test-set path
+output_path: #add output-file path
