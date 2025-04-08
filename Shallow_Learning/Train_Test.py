@@ -1,5 +1,6 @@
 import json
 import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pandas as pd
 import numpy as np
 from collections import defaultdict
@@ -27,17 +28,22 @@ from joblib import Parallel, delayed, parallel_backend
 # Suppress warnings
 warnings.filterwarnings("ignore")
 
+# Check for XGBoost
 try:
     import xgboost as xgb
     HAVE_XGB = True
     
+    # Check XGBoost version
     xgb_version = tuple(map(int, xgb.__version__.split('.')))
     XGB_VERSION_2_PLUS = xgb_version[0] >= 2
-
+    
+    # Check if GPU is available for XGBoost
     try:
         if XGB_VERSION_2_PLUS:
+            # XGBoost 2.0+ syntax
             gpu_params = {'tree_method': 'hist', 'device': 'cuda'}
         else:
+            # XGBoost pre-2.0 syntax
             gpu_params = {'tree_method': 'gpu_hist', 'gpu_id': 0}
             
         test_model = xgb.XGBClassifier(**gpu_params)
@@ -61,6 +67,8 @@ except ImportError:
 try:
     import umap
     HAVE_UMAP = True
+    
+    # Check if CUDA is available for UMAP
     try:
         import cuml
         HAVE_CUML = True
@@ -77,6 +85,8 @@ try:
     import torch
     from sentence_transformers import SentenceTransformer
     HAVE_SENTENCE_TRANSFORMERS = True
+    
+    # Check if GPU is available for pytorch
     CUDA_AVAILABLE = torch.cuda.is_available()
     if CUDA_AVAILABLE:
         print(f"PyTorch GPU acceleration available: {torch.cuda.get_device_name(0)}")
@@ -106,12 +116,15 @@ try:
 except ImportError:
     HAVE_VADER = False
     print("VADER not available. Install with: pip install vaderSentiment")
+    
+    # Create a mock sentiment analyzer
     class MockSentimentAnalyzer:
         def polarity_scores(self, text):
             return {'neg': 0, 'neu': 0, 'pos': 0, 'compound': 0}
     
     sentiment_analyzer = MockSentimentAnalyzer()
 
+# Define relation class mapping
 RELATION_MAP = {
     -1.0: "Destructive Disagreement",
     -0.5: "Destructive Agreement",
@@ -119,6 +132,8 @@ RELATION_MAP = {
     0.5: "Constructive Agreement",
     1.0: "Constructive Disagreement"
 }
+
+# Simplified relation map for tables
 SIMPLE_RELATION_MAP = {
     -1.0: "destructive_attack",
     -0.5: "destructive_agreement",
@@ -126,6 +141,8 @@ SIMPLE_RELATION_MAP = {
     0.5: "constructive_agreement",
     1.0: "constructive_attack"
 }
+
+# Define chain categories
 CHAIN_CATEGORIES = {
     "Highly Destructive": (-1.0, -0.75),
     "Moderately Destructive": (-0.75, -0.25),
@@ -144,17 +161,21 @@ class ProgressEstimator:
     def update(self, increment=1):
         """Update progress and print estimated time remaining."""
         self.completed_tasks += increment
-
+        
+        # Calculate progress percentage
         progress = self.completed_tasks / self.total_tasks
-
+        
+        # Calculate elapsed time and estimate remaining time
         elapsed_time = time.time() - self.start_time
         if progress > 0:
             estimated_total_time = elapsed_time / progress
             remaining_time = estimated_total_time - elapsed_time
-
+            
+            # Format times for display
             elapsed_str = str(timedelta(seconds=int(elapsed_time)))
             remaining_str = str(timedelta(seconds=int(remaining_time)))
-
+            
+            # Print progress bar and time estimates
             bar_length = 30
             filled_length = int(bar_length * progress)
             bar = '█' * filled_length + '░' * (bar_length - filled_length)
@@ -200,6 +221,8 @@ def comments_to_dataframe(comments):
     """Convert comments list to DataFrame."""
     df = pd.DataFrame(comments)
     print(f"Created DataFrame with {len(df)} rows and {len(df.columns)} columns")
+
+    # Check for missing divisiveness scores
     missing = df['divisiveness_score'].isna().sum()
     if missing > 0:
         print(f"Warning: {missing} comments missing divisiveness scores")
@@ -213,11 +236,16 @@ def extract_text_features(df):
     print("Extracting text features...")
     features = pd.DataFrame(index=df.index)
 
+    # Check if required columns exist
     if 'CommentText' not in df.columns or 'ParentCommentText' not in df.columns:
         print("Warning: Comment text columns not found")
         return features
+
+    # Fill NaN values with empty strings
     df['CommentText'] = df['CommentText'].fillna('')
     df['ParentCommentText'] = df['ParentCommentText'].fillna('')
+
+    # Define simple functions that don't require NLTK
     def count_words_simple(text):
         return len(text.split())
 
@@ -237,6 +265,7 @@ def extract_text_features(df):
     def count_punctuation(text, punct):
         return text.count(punct) / (len(text) + 1)
 
+    # Extract features from child comments
     progress = tqdm(total=7, desc="Text Features")
     
     print("Processing child comments...")
@@ -284,9 +313,12 @@ def extract_text_embeddings(df, model_name='roberta-base-nli-stsb-mean-tokens', 
         print("Warning: Sentence Transformers not available. Returning empty DataFrame.")
         return pd.DataFrame(index=df.index)
 
+    # Check if required column exists
     if 'CommentText' not in df.columns:
         print("Warning: CommentText column not found")
         return pd.DataFrame(index=df.index)
+
+    # Load model with GPU if available
     try:
         device = 'cuda' if CUDA_AVAILABLE else 'cpu'
         model = SentenceTransformer(model_name, device=device)
@@ -295,8 +327,10 @@ def extract_text_embeddings(df, model_name='roberta-base-nli-stsb-mean-tokens', 
         print(f"Error loading embedding model: {e}")
         return pd.DataFrame(index=df.index)
 
+    # Fill NaN values with empty strings
     texts = df['CommentText'].fillna('').tolist()
 
+    # Generate embeddings
     print(f"Generating embeddings for {len(texts)} comments using batch size {batch_size}...")
     start_time = time.time()
     try:
@@ -306,6 +340,7 @@ def extract_text_embeddings(df, model_name='roberta-base-nli-stsb-mean-tokens', 
         print(f"Error generating embeddings: {e}")
         return pd.DataFrame(index=df.index)
 
+    # Create DataFrame with proper column names
     embedding_df = pd.DataFrame(
         embeddings,
         index=df.index,
@@ -321,7 +356,8 @@ def extract_text_embeddings(df, model_name='roberta-base-nli-stsb-mean-tokens', 
 def reduce_embedding_dimensions(embedding_features, method='pca', n_components=50):
     """Apply dimension reduction to embeddings."""
     print(f"Applying {method.upper()} to reduce embeddings from {embedding_features.shape[1]} to {n_components} dimensions")
-
+    
+    # First standardize
     scaler = StandardScaler()
     scaled_embeddings = scaler.fit_transform(embedding_features)
     
@@ -535,7 +571,7 @@ def plot_learning_curve(estimator, X, y, cv=5, title='Learning Curve', filename=
     try:
         train_sizes, train_scores, test_scores = learning_curve(
             estimator, X, y, cv=cv, scoring='f1_macro',
-            train_sizes=train_sizes, n_jobs=-1
+            train_sizes=train_sizes, n_jobs=-1,
         )
 
         # Calculate mean and std for train and test scores
@@ -600,7 +636,7 @@ def train_model_with_tuning(model_name, base_model, features, target, class_valu
         ])
         
         # Set up grid search
-        with parallel_backend('loky', n_jobs=-1):  # Use all available cores
+        with parallel_backend('loky', n_jobs=-1):  
             grid_search = GridSearchCV(
                 pipeline,
                 param_grid,
@@ -711,6 +747,14 @@ def evaluate_comment_predictions(model, features, true_labels, class_values, ind
     f1 = f1_score(true_indices, pred_indices, average='macro')
     print(f"Macro F1 Score: {f1:.4f}")
 
+    # Get class-specific F1 scores
+    _, _, f1_per_class, _ = precision_recall_fscore_support(
+        true_indices, pred_indices, labels=range(len(class_values)), average=None, zero_division=0
+    )
+    
+    # Create dictionary mapping class values to their F1 scores
+    class_f1_dict = {class_values[i]: f1_per_class[i] for i in range(len(class_values))}
+
     # Classification report with meaningful class names
     target_names = [RELATION_MAP[val] for val in class_values]
     class_report = classification_report(true_indices, pred_indices, target_names=target_names, zero_division=0)
@@ -739,7 +783,7 @@ def evaluate_comment_predictions(model, features, true_labels, class_values, ind
     
     plt.close()
 
-    return pred_values, f1
+    return pred_values, f1, class_f1_dict
 
 def evaluate_chain_predictions(pred_values, test_data, test_df, class_values, output_dir=None):
     """Ultra-optimized chain-level predictions using direct dictionary lookups."""
@@ -1177,24 +1221,24 @@ def run_experiments(train_data, test_data, output_path, pca_components_range, k_
                 'model_params': best_params,
                 'k_neighbors': best_k
             }
-            
-            # Store metrics for each class in the result tables
-            comment_results['macro_f1'].loc[feature_name, model_name] = cv_score
-            
-            for class_val, f1_score in class_metrics.items():
-                class_name = SIMPLE_RELATION_MAP[class_val]
-                comment_results[class_name].loc[feature_name, model_name] = f1_score
-            
+
             # Evaluate on test set for comment predictions
             test_comment_dir = os.path.join(model_dir, "comment_evaluation")
             os.makedirs(test_comment_dir, exist_ok=True)
             
             # Get prediction values for comments (to be reused in chain evaluation)
-            pred_values, test_f1 = evaluate_comment_predictions(
+            pred_values, test_f1, test_class_f1 = evaluate_comment_predictions(
                 best_model, test_features, test_target, class_values, 
                 {i: val for i, val in enumerate(class_values)},
                 output_dir=test_comment_dir
             )
+            
+            # Store metrics for each class in the result tables
+            comment_results['macro_f1'].loc[feature_name, model_name] = test_f1
+            
+            for class_val, f1_score in test_class_f1.items():
+                class_name = SIMPLE_RELATION_MAP[class_val]
+                comment_results[class_name].loc[feature_name, model_name] = f1_score
             
             # Evaluate on chain level using the same prediction values
             test_chain_dir = os.path.join(model_dir, "chain_evaluation")
@@ -1312,23 +1356,23 @@ def run_experiments(train_data, test_data, output_path, pca_components_range, k_
                             'pca_components': n_components
                         }
                         
-                        # Store metrics for each class in the result tables
-                        comment_results['macro_f1'].loc[display_name, model_name] = cv_score
-                        
-                        for class_val, f1_score in class_metrics.items():
-                            class_name = SIMPLE_RELATION_MAP[class_val]
-                            comment_results[class_name].loc[display_name, model_name] = f1_score
-                        
                         # Evaluate on test set for comment predictions
                         test_comment_dir = os.path.join(model_dir, "comment_evaluation")
                         os.makedirs(test_comment_dir, exist_ok=True)
                         
                         # Get prediction values for comments (to be reused in chain evaluation)
-                        pred_values, test_f1 = evaluate_comment_predictions(
+                        pred_values, test_f1, test_class_f1 = evaluate_comment_predictions(
                             best_model, test_features, test_target, class_values, 
                             {i: val for i, val in enumerate(class_values)},
                             output_dir=test_comment_dir
                         )
+                        
+                        # Store metrics for each class in the result tables
+                        comment_results['macro_f1'].loc[display_name, model_name] = test_f1
+                        
+                        for class_val, f1_score in test_class_f1.items():
+                            class_name = SIMPLE_RELATION_MAP[class_val]
+                            comment_results[class_name].loc[display_name, model_name] = f1_score
                         
                         # Evaluate on chain level using the same prediction values
                         test_chain_dir = os.path.join(model_dir, "chain_evaluation")
@@ -1374,7 +1418,8 @@ def run_experiments(train_data, test_data, output_path, pca_components_range, k_
         test_combinations = create_feature_combinations(
             test_text, test_stance, test_propaganda, test_embeddings
         )
-
+        
+        # Process only embedding-based combinations
         for feature_name in ["Base+Embedding", "Base+Tech+Stance+Embedding"]:
             # Create directory for this feature combination
             feature_dir = os.path.join(full_embedding_dir, feature_name.replace('+', '_'))
@@ -1414,79 +1459,94 @@ def run_experiments(train_data, test_data, output_path, pca_components_range, k_
                     'k_neighbors': best_k
                 }
                 
-                # Store metrics for each class in the result tables
-                comment_results['macro_f1'].loc[feature_name, model_name] = cv_score
-                
-                for class_val, f1_score in class_metrics.items():
-                    class_name = SIMPLE_RELATION_MAP[class_val]
-                    comment_results[class_name].loc[feature_name, model_name] = f1_score
-                
                 # Evaluate on test set for comment predictions
                 test_comment_dir = os.path.join(model_dir, "comment_evaluation")
                 os.makedirs(test_comment_dir, exist_ok=True)
                 
                 # Get prediction values for comments (to be reused in chain evaluation)
-                pred_values, test_f1 = evaluate_comment_predictions(
+                pred_values, test_f1, test_class_f1 = evaluate_comment_predictions(
                     best_model, test_features, test_target, class_values, 
                     {i: val for i, val in enumerate(class_values)},
                     output_dir=test_comment_dir
                 )
-
+                
+                # Store metrics for each class in the result tables
+                comment_results['macro_f1'].loc[feature_name, model_name] = test_f1
+                
+                for class_val, f1_score in test_class_f1.items():
+                    class_name = SIMPLE_RELATION_MAP[class_val]
+                    comment_results[class_name].loc[feature_name, model_name] = f1_score
+                
+                # Evaluate on chain level using the same prediction values
                 test_chain_dir = os.path.join(model_dir, "chain_evaluation")
                 os.makedirs(test_chain_dir, exist_ok=True)
-
+                
+                # Use predictions directly without recomputing them
                 chain_metrics = evaluate_chain_predictions(
                     pred_values, test_data, test_df, class_values, 
                     output_dir=test_chain_dir
                 )
-
+                
+                # Store chain metrics
                 chain_results['macro_f1'].loc[feature_name, model_name] = chain_metrics['macro_f1']
                 
                 for category, f1_score in chain_metrics['category_f1'].items():
                     chain_results[category].loc[feature_name, model_name] = f1_score
-
+                
+                # Save model
                 model_path = os.path.join(model_dir, f"{feature_name}_{model_name}_best_model.pkl")
                 with open(model_path, 'wb') as f:
                     pickle.dump(best_model, f)
-
+                
+                # Check if this is the best model for this feature combination
                 if cv_score > feature_best_results['comment_f1']:
                     feature_best_results['comment_f1'] = cv_score
                     feature_best_results['chain_f1'] = chain_metrics['macro_f1']
                     feature_best_results['model_name'] = model_name
                     feature_best_results['model'] = best_model
-
+            
+            # Save the best model for this feature combination
             best_configs[feature_name] = feature_best_results
-  
+    
+    # Clean up any NaN values in the results
     for result_table in comment_results.values():
         result_table.fillna(0, inplace=True)
     
     for result_table in chain_results.values():
         result_table.fillna(0, inplace=True)
     
+    # Save results to tables directory
     tables_dir = os.path.join(output_path, "tables")
     os.makedirs(tables_dir, exist_ok=True)
-
+    
+    # Save comment-level results
     for metric_name, table in comment_results.items():
         table.to_csv(f"{tables_dir}/comment_{metric_name}.csv")
         print(f"Saved {metric_name} table to {tables_dir}/comment_{metric_name}.csv")
     
+    # Save chain-level results
     for metric_name, table in chain_results.items():
         table.to_csv(f"{tables_dir}/chain_{metric_name}.csv")
         print(f"Saved {metric_name} table to {tables_dir}/chain_{metric_name}.csv")
     
+    # Create a consolidated Excel file with all tables
     with pd.ExcelWriter(f"{tables_dir}/all_results.xlsx") as writer:
         # Write comment-level sheets
         for metric_name, table in comment_results.items():
             table.to_excel(writer, sheet_name=f"comment_{metric_name}")
         
+        # Write chain-level sheets
         for metric_name, table in chain_results.items():
             table.to_excel(writer, sheet_name=f"chain_{metric_name}")
         
+        # Write parameter configurations
         pd.DataFrame.from_dict(param_configs, orient='index').to_excel(writer, sheet_name="parameters")
     
     print(f"Saved all results to {tables_dir}/all_results.xlsx")
-  
+    
+    # Save best configurations and models
     with open(f"{output_path}/best_configs.json", 'w') as f:
+        # Convert to serializable format
         serializable_configs = {}
         for feature_name, config in best_configs.items():
             serializable_configs[feature_name] = {
@@ -1498,6 +1558,7 @@ def run_experiments(train_data, test_data, output_path, pca_components_range, k_
     
     print(f"Saved best configurations to {output_path}/best_configs.json")
     
+    # Find overall best model
     best_overall_f1 = -1
     best_overall_config = None
     best_overall_feature = None
@@ -1513,7 +1574,8 @@ def run_experiments(train_data, test_data, output_path, pca_components_range, k_
     print(f"Model: {best_overall_config['model_name']}")
     print(f"Comment F1: {best_overall_config['comment_f1']:.4f}")
     print(f"Chain F1: {best_overall_config['chain_f1']:.4f}")
-
+    
+    # Return all results for further analysis
     return {
         'comment_results': comment_results,
         'chain_results': chain_results,
@@ -1529,20 +1591,22 @@ def run_experiments(train_data, test_data, output_path, pca_components_range, k_
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run divisiveness prediction experiments with parameter tuning")
-    parser.add_argument('--train_path', default="./train_dataset.json", help="Path to training dataset")
-    parser.add_argument('--test_path', default="./test_dataset.json", help="Path to test dataset")
-    parser.add_argument('--output_path', default="./results", help="Directory to save results")
+    parser.add_argument('--train_path', default="Add Path", help="Path to training dataset")
+    parser.add_argument('--test_path', default="Add Path", help="Path to test dataset")
+    parser.add_argument('--output_path', default="Add Path", help="Directory to save results")
     parser.add_argument('--pca_components', default="20,25,30,35,40,45,50", help="PCA components to test (comma-separated)")
     parser.add_argument('--k_neighbors', default="5,8,10,12", help="SMOTE k_neighbors values to test (comma-separated)")
     
     args = parser.parse_args()
     
+    # Parse PCA components and k_neighbors ranges
     pca_components_range = [int(x) for x in args.pca_components.split(',')]
     k_neighbors_range = [int(x) for x in args.k_neighbors.split(',')]
     
     print(f"Testing PCA components: {pca_components_range}")
     print(f"Testing SMOTE k_neighbors: {k_neighbors_range}")
-
+    
+    # Load data
     train_data = load_json_data(args.train_path)
     test_data = load_json_data(args.test_path)
     
@@ -1550,4 +1614,5 @@ if __name__ == "__main__":
         print("Failed to load data. Exiting.")
         exit(1)
     
+    # Run experiments
     run_experiments(train_data, test_data, args.output_path, pca_components_range, k_neighbors_range)
