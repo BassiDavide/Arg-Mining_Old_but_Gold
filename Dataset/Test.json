@@ -18766,7 +18766,7 @@
           "divisiveness_score": 0.5,
           "annotation_uncertain": false,
           "incorrect_parent": false,
-          "parent_comment_stance": 1
+          "parent_comment_stance": 2
         },
         {
           "CommentID": "comment_c3d13a308b",
