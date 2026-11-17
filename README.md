@@ -12,6 +12,7 @@ These additional guidelines are not intended to replace or override the terms of
 If you use these data in your publication please cite it as: 
 Bassi, D., Marino, E. B., Vieira, R., & Pereira, M. (2025, July). Old but gold: LLM-based features and shallow learning methods for fine-grained controversy analysis in YouTube comments. In Proceedings of the 12th Argument mining Workshop (pp. 46-57).
 
+```bibtex
 @inproceedings{bassi-etal-2025-old,
     title = "Old but Gold: {LLM}-Based Features and Shallow Learning Methods for Fine-Grained Controversy Analysis in {Y}ou{T}ube Comments",
     author = "Bassi, Davide  and
@@ -34,3 +35,5 @@ Bassi, D., Marino, E. B., Vieira, R., & Pereira, M. (2025, July). Old but gold: 
     ISBN = "979-8-89176-258-9",
     abstract = "Online discussions can either bridge differences through constructive dialogue or amplify divisions through destructive interactions. paper proposes a computational approach to analyze dialogical relation patterns in YouTube comments, offering a fine-grained framework for controversy detection, enabling also analysis of individual contributions. experiments demonstrate that shallow learning methods, when equipped with these theoretically-grounded features, consistently outperform more complex language models in characterizing discourse quality at both comment-pair and conversation-chain levels.studies confirm that divisive rhetorical techniques serve as strong predictors of destructive communication patterns. work advances understanding of how communicative choices shape online discourse, moving beyond engagement metrics toward nuanced examination of constructive versus destructive dialogue patterns."
 }
+```
+
