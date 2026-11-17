@@ -1,0 +1,5 @@
+# config-deepseek-chat.yaml
+model_name: deepseek-chat
+prompt_type: text_stance_techniques  # Options: text_only, text_stance, text_techniques, text_stance_techniques
+input_data_path: #add test-set path
+output_path: #add output-file path

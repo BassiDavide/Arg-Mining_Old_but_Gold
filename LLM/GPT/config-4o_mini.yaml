@@ -1,0 +1,5 @@
+# config.yaml
+model_name: gpt-4o-mini
+prompt_type: text_stance_techniques  # Options: text_only, text_stance, text_techniques, text_stance_techniques
+input_data_path: #add test-set path
+output_path: #add output-file path
