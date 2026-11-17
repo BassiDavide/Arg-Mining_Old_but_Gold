@@ -123,6 +123,7 @@ from the same YouTube thread can share messages.
   edited after collection may differ from the text that was annotated.
 - **Author names.** `AuthorName` is the author's current YouTube handle, which may have changed.
 - `NumberOfLikes` and `Timestamp` are not updated: they keep their values at collection time.
+- For any problem or additional inquiry you can contact the corresponding author at "bassidavide94@gmail.com"
 
 Rehydrated data contains third-party content. Use it in line with the
 [YouTube API Services Terms of Service](https://developers.google.com/youtube/terms/api-services-terms-of-service)
